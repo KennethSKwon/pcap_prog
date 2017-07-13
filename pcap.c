@@ -1,59 +1,60 @@
 #include <pcap.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <arpa/inet.h>
 #include <net/ethernet.h>
 #include <netinet/in.h>
 
 typedef struct ethernet{
-	unsigned char dest[6];
-	unsigned char src[6];
-	unsigned short type;
+	uint8_t dest[6];
+	uint8_t src[6];
+	uint16_t type;
 } ethernet;
 
 typedef struct ip{
-	unsigned char hdr_len:4;
-	unsigned char version:4;
-	unsigned char tos;
-	unsigned short total_len;
-	unsigned short id;
-	unsigned char ip_frag_offset:5;
-	unsigned char ip_more_fragment:1;
-	unsigned char ip_dont_fragment:1;
-	unsigned char ip_reserved_zero:1;
-	unsigned char ip_frag_offset1;
-	unsigned char ip_ttl;
-	unsigned char ip_protocol;
-	unsigned short ip_checksum;
+	uint8_t hdr_len:4;
+	uint8_t version:4;
+	uint8_t tos;
+	uint16_t total_len;
+	uint16_t id;
+	uint8_t ip_frag_offset:5;
+	uint8_t ip_more_fragment:1;
+	uint8_t ip_dont_fragment:1;
+	uint8_t ip_reserved_zero:1;
+	uint8_t ip_frag_offset1;
+	uint8_t ip_ttl;
+	uint8_t ip_protocol;
+	uint16_t ip_checksum;
 	struct in_addr ip_srcaddr;
 	struct in_addr ip_destaddr;
 } ip;
 
 typedef struct tcp{
-	unsigned short source_port;
-	unsigned short dest_port;
-	unsigned int sequence;
-	unsigned int acknowledge;
-	unsigned char ns:1;
-	unsigned char reserved_part1:3;
-	unsigned char data_offset:4;
-	unsigned char fin:1;
-	unsigned char syn:1;
-	unsigned char rst:1;
-	unsigned char psh:1;
-	unsigned char ack:1;
-	unsigned char urg:1;
-	unsigned char ecn:1;
-	unsigned char cwr:1;
-	unsigned short window;
-	unsigned short checksum;
-	unsigned short urgent_pointer;
+	uint16_t source_port;
+	uint16_t dest_port;
+	uint32_t sequence;
+	uint32_t acknowledge;
+	uint8_t ns:1;
+	uint8_t reserved_part1:3;
+	uint8_t data_offset:4;
+	uint8_t fin:1;
+	uint8_t syn:1;
+	uint8_t rst:1;
+	uint8_t psh:1;
+	uint8_t ack:1;
+	uint8_t urg:1;
+	uint8_t ecn:1;
+	uint8_t cwr:1;
+	uint16_t window;
+	uint16_t checksum;
+	uint16_t urgent_pointer;
 } tcp;
 
 void getmac(const char *byte){
 	int i;
 	for(i = 0; i < 5; i++)
-		printf("%02x:", byte[i] & 0xff);
-	printf("%02x\n", byte[i] & 0xff);
+		printf("%02x:", (int)*((uint8_t *)&byte[i]));
+	printf("%02x\n", (int)*((uint8_t *)&byte[i]));
 }
 
 int main(int argc, char *argv[])
@@ -69,7 +70,7 @@ int main(int argc, char *argv[])
 		ethernet *eth;
 		ip *iph;
 		tcp *tcph;
-		char buf[17] = {0, };
+		char *buf = NULL;
 		//const u_char *packet;		/* The actual packet */
 		int res;
 		int i;
@@ -103,7 +104,7 @@ int main(int argc, char *argv[])
 		}
 		while(1){	/* Grab a packet */
 			res = pcap_next_ex(handle, &header, (const u_char **)&eth);
-			if(res == 0)
+			if(res <= 0)
 				continue;
 
 			if (ntohs(eth->type) != ETHERTYPE_IP){
@@ -131,6 +132,15 @@ int main(int argc, char *argv[])
 			
 			printf("source port : %d\n", ntohs(tcph->source_port));
 			printf("dest port : %d\n", ntohs(tcph->dest_port));
+
+			buf = (char *)((char *)tcph + tcph->data_offset * 4);
+			for(i = 0; i < 16; i++){
+				if(buf[i] >= ' ' && buf[i] <= '~')
+					printf("%c", buf[i]);
+				else
+					printf(".");
+			}
+			puts("");
 		}
 		pcap_close(handle);
 		return(0);
