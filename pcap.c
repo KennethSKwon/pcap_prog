@@ -1,5 +1,6 @@
 #include <pcap.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <stdint.h>
 #include <arpa/inet.h>
 #include <net/ethernet.h>
@@ -135,7 +136,7 @@ int main(int argc, char *argv[])
 
 			buf = (char *)((char *)tcph + tcph->data_offset * 4);
 			for(i = 0; i < 16; i++){
-				if(buf[i] >= ' ' && buf[i] <= '~')
+				if(isprint(buf[i]))
 					printf("%c", buf[i]);
 				else
 					printf(".");
