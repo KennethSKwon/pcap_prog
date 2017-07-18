@@ -54,8 +54,8 @@ typedef struct tcp{
 void getmac(const char *byte){
 	int i;
 	for(i = 0; i < 5; i++)
-		printf("%02x:", (int)*((uint8_t *)&byte[i]));
-	printf("%02x\n", (int)*((uint8_t *)&byte[i]));
+		printf("%02x:", *(uint8_t *)&byte[i]);
+	printf("%02x\n", *(uint8_t *)&byte[i]);
 }
 
 int main(int argc, char *argv[])
@@ -76,20 +76,13 @@ int main(int argc, char *argv[])
 		int res;
 		int i;
 
-		/* Define the device */
-		dev = pcap_lookupdev(errbuf);
-		if (dev == NULL) {
-				fprintf(stderr, "Couldn't find default device: %s\n", errbuf);
-				return(2);
+		if(argc != 2){
+			printf("[Usage] ./pcap [network_device]\n");
+			return 0;
 		}
-		/* Find the properties for the device */
-		if (pcap_lookupnet(dev, &net, &mask, errbuf) == -1) {
-				fprintf(stderr, "Couldn't get netmask for device %s: %s\n", dev, errbuf);
-				net = 0;
-				mask = 0;
-		}
+
 		/* Open the session in promiscuous mode */
-		handle = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
+		handle = pcap_open_live(argv[1], BUFSIZ, 1, 1000, errbuf);
 		if (handle == NULL) {
 				fprintf(stderr, "Couldn't open device %s: %s\n", dev, errbuf);
 				return(2);
@@ -103,15 +96,38 @@ int main(int argc, char *argv[])
 				fprintf(stderr, "Couldn't install filter %s: %s\n", filter_exp, pcap_geterr(handle));
 				return(2);
 		}
+
+		char ip_src[17] = { 0, };
+		char ip_dst[17] = { 0, };
+
 		while(1){	/* Grab a packet */
 			res = pcap_next_ex(handle, &header, (const u_char **)&eth);
 			if(res <= 0)
 				continue;
 
 			if (ntohs(eth->type) != ETHERTYPE_IP){
-				printf("not ip type! %x\n", eth->type);
+				printf("Not IP type! %x\n", eth->type);
 				continue;
 			}
+
+			iph = (ip *)((char *)eth + sizeof(ethernet));
+
+			inet_ntop(AF_INET, (const char *)&iph->ip_srcaddr, ip_src, 17);
+			inet_ntop(AF_INET, (const char *)&iph->ip_destaddr, ip_dst, 17);
+
+			if (iph->ip_protocol != IPPROTO_TCP){
+				    printf("Not tcp protocol! %x\n", iph->ip_protocol);
+				    continue;
+			}
+
+			tcph = (tcp *)((char *)iph + iph->hdr_len * 4);
+			
+			unsigned int data_len = ntohs(iph->total_len);
+			unsigned int off = tcph->data_offset * 4 + iph->hdr_len * 4;
+			if(data_len <= off){
+				continue;
+			}
+			else data_len -= off;
 
 			printf("source mac : ");
 			getmac(eth->src);
@@ -119,23 +135,14 @@ int main(int argc, char *argv[])
 			printf("dest mac : ");
 			getmac(eth->dest);
 
-			iph = (ip *)((char *)eth + sizeof(ethernet));
+			printf("source ip : %s\n", ip_src);
+			printf("dest ip : %s\n", ip_dst);
 
-			printf("source ip : %s\n", inet_ntoa(iph->ip_srcaddr));
-			printf("dest ip : %s\n", inet_ntoa(iph->ip_destaddr));
-
-			if (iph->ip_protocol != IPPROTO_TCP){
-				    printf("not tcp protocol! %x\n", iph->ip_protocol);
-				    continue;
-			}
-
-			tcph = (tcp *)((char *)iph + iph->hdr_len * 4);
-			
 			printf("source port : %d\n", ntohs(tcph->source_port));
 			printf("dest port : %d\n", ntohs(tcph->dest_port));
 
 			buf = (char *)((char *)tcph + tcph->data_offset * 4);
-			for(i = 0; i < 16; i++){
+			for(i = 0; i < data_len; i++){
 				if(isprint(buf[i]))
 					printf("%c", buf[i]);
 				else
